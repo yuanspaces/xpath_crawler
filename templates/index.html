@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+
+{% block body %}
+  <main class="page-shell">
+    <section class="hero panel">
+      <div>
+        <h1>XPath 数据获取</h1>
+      </div>
+      <p class="hero-copy">
+        配置目标网址、行 XPath 和字段规则。字段支持直接获取，也支持在某一行里先提取跳转链接，再进入详情页继续按子规则获取数据。
+      </p>
+    </section>
+
+    <section class="main-grid">
+      <form method="post" class="panel form-panel" id="crawler-form">
+        <input type="hidden" name="rules_json" id="rules-json-input">
+
+        <div class="section-head">
+          <h2>数据获取配置</h2>
+        </div>
+
+        <div class="input-grid">
+          <label class="field wide">
+            <span>目标网址</span>
+            <input
+              type="url"
+              name="target_url"
+              value="{{ form_state.target_url }}"
+              placeholder="https://example.com/list"
+              required
+            >
+          </label>
+
+          <label class="field wide">
+            <span>行 XPath</span>
+            <input
+              type="text"
+              name="row_xpath"
+              value="{{ form_state.row_xpath }}"
+              placeholder="//div[@class='item']"
+            >
+          </label>
+
+          <label class="field">
+            <span>请求超时（秒）</span>
+            <input type="number" name="timeout" min="1" value="{{ form_state.timeout }}">
+          </label>
+
+          <label class="field">
+            <span>最大行数</span>
+            <input type="number" name="max_rows" min="1" value="{{ form_state.max_rows }}">
+          </label>
+
+          <label class="field wide">
+            <span>User-Agent</span>
+            <textarea name="user_agent" rows="3">{{ form_state.user_agent }}</textarea>
+          </label>
+        </div>
+
+        <div class="table-card">
+          <div class="section-head">
+            <h2>字段映射</h2>
+            <button type="button" class="primary-button subtle add-rule-button" data-target="root">新增字段</button>
+          </div>
+
+          <div class="table-wrap">
+            <table class="config-table">
+              <thead>
+                <tr>
+                  <th>列名</th>
+                  <th>XPath</th>
+                  <th>提取方式</th>
+                  <th>属性名</th>
+                  <th>保存结果</th>
+                  <th>跳转链接</th>
+                  <th>正则分割</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="rules-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        {% if errors %}
+          <div class="notice error">
+            {% for error in errors %}
+              <p>{{ error }}</p>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        <div class="submit-row">
+          <button type="submit" name="form_action" value="preview" class="primary-button preview-button" id="preview-button">
+            <span class="button-spinner" aria-hidden="true" hidden></span>
+            <span class="button-label">&#39044;&#35272;&#25968;&#25454;</span>
+          </button>
+          <button type="submit" name="form_action" value="export" class="secondary-button">导出 CSV</button>
+        </div>
+      </form>
+
+      <section class="panel result-panel" id="result-panel">
+        <div class="section-head">
+          <h2>结果预览</h2>
+        </div>
+
+        {% if result %}
+          <div class="stats-grid">
+            <article class="stat-card">
+              <span>最终地址</span>
+              <strong title="{{ result.final_url }}">{{ result.final_url }}</strong>
+            </article>
+            <article class="stat-card">
+              <span>状态码</span>
+              <strong>{{ result.status_code }}</strong>
+            </article>
+            <article class="stat-card">
+              <span>提取行数</span>
+              <strong>{{ result.rows | length }}</strong>
+            </article>
+            <article class="stat-card">
+              <span>耗时</span>
+              <strong>{{ result.elapsed_ms }} ms</strong>
+            </article>
+          </div>
+
+          <p class="meta-line">Content-Type：{{ result.content_type or '未返回' }}</p>
+
+          {% if result.rows %}
+            <div class="result-wrap">
+              <table class="result-table">
+                <thead>
+                  <tr>
+                    {% for header in result.headers %}
+                      <th>{{ header }}</th>
+                    {% endfor %}
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in result.rows %}
+                    <tr>
+                      {% for header in result.headers %}
+                        <td>{{ row.get(header, '') }}</td>
+                      {% endfor %}
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <div class="empty-state">
+              <p>页面请求成功，但没有匹配到结果。</p>
+              <p>优先检查行 XPath、字段 XPath 和跳转链接字段的 XPath 是否正确。</p>
+            </div>
+          {% endif %}
+        {% else %}
+          <div class="empty-state">
+            <p>先填写目标网址和 XPath 规则，再执行数据获取。</p>
+            <p>如果某一列需要先点进详情页，需要把该列的提取方式切到“跳转链接提取”，然后在下方继续配置子字段。</p>
+            <p>取消勾选“保存结果”的字段，会作为中间步骤参与获取，但不会出现在最终输出里。</p>
+          </div>
+        {% endif %}
+      </section>
+    </section>
+  </main>
+
+  <template id="rule-row-template">
+    <tr class="rule-row">
+      <td>
+        <input type="text" class="rule-name-input" placeholder="例如：标题">
+      </td>
+      <td>
+        <input type="text" class="rule-xpath-input" placeholder=".//a[@class='title']">
+      </td>
+      <td>
+        <select class="extract-select">
+          <option value="text">文本</option>
+          <option value="attr">属性</option>
+          <option value="html">HTML</option>
+        </select>
+      </td>
+      <td>
+        <input type="text" class="attr-input" placeholder="href / src / data-id">
+      </td>
+      <td>
+        <label class="save-toggle">
+          <input type="checkbox" class="include-checkbox" checked>
+        </label>
+      </td>
+      <td>
+        <label class="save-toggle">
+          <input type="checkbox" class="follow-checkbox">
+        </label>
+      </td>
+      <td>
+        <div class="regex-cell">
+          <label class="save-toggle regex-toggle">
+            <input type="checkbox" class="regex-checkbox">
+          </label>
+          <input type="text" class="regex-pattern-input" placeholder="(\d{4}-\d{2}-\d{2}).*?" hidden>
+        </div>
+      </td>
+      <td class="actions-cell">
+        <button type="button" class="icon-button remove-rule" title="删除" aria-label="删除">&times;</button>
+      </td>
+    </tr>
+  </template>
+
+  <template id="child-config-template">
+    <tr class="child-config-row" hidden>
+      <td colspan="8">
+        <div class="child-config-card">
+          <div class="child-config-head">
+            <strong>详情页子配置</strong>
+            <button type="button" class="ghost-button add-rule-button">新增子字段</button>
+          </div>
+          <div class="table-wrap child-table-wrap">
+            <table class="config-table child-table">
+              <thead>
+                <tr>
+                  <th>列名</th>
+                  <th>XPath</th>
+                  <th>提取方式</th>
+                  <th>属性名</th>
+                  <th>保存结果</th>
+                  <th>跳转链接</th>
+                  <th>正则分割</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody class="child-rules-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </td>
+    </tr>
+  </template>
+  <template id="loading-result-template">
+    <div class="loading-state" role="status" aria-live="polite">
+      <span class="loading-spinner" aria-hidden="true"></span>
+      <p>??????????...</p>
+    </div>
+  </template>
+{% endblock %}

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}XPath 数据获取{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body data-submitted="{{ 'true' if submitted else 'false' }}">
+    {% block body %}{% endblock %}
+    <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="true"></div>
+    <script>
+      window.initialFormState = {{ form_state | tojson }};
+      window.initialToast = {{ toast | tojson if toast else 'null' }};
+    </script>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+  </body>
+</html>
